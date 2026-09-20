@@ -1,16 +1,12 @@
 import XCTest
-@testable import Plugin
+@testable import IntercomPlugin
 
 class IntercomTests: XCTestCase {
+    func testPluginIsBridgedUnderItsJavaScriptName() {
+        let plugin = IntercomPlugin()
 
-    func testEcho() {
-        // This is an example of a functional test case for a plugin.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-
-        let implementation = Intercom()
-        let value = "Hello, World!"
-        let result = implementation.echo(value)
-
-        XCTAssertEqual(value, result)
+        XCTAssertEqual(plugin.identifier, "IntercomPlugin")
+        XCTAssertEqual(plugin.jsName, "Intercom")
+        XCTAssertTrue(plugin.pluginMethods.contains { $0.name == "registerIdentifiedUser" })
     }
 }
