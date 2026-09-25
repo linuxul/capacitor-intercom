@@ -8,29 +8,32 @@ import Intercom
  */
 @objc(IntercomPlugin)
 public class IntercomPlugin: CAPPlugin, CAPBridgedPlugin {
-    public let identifier = "IntercomPlugin" 
-    public let jsName = "Intercom" 
+    public let identifier = "IntercomPlugin"
+    public let jsName = "Intercom"
+    // Every method stays synchronous on the bridge queue, where the plugin has always called the Intercom SDK: the
+    // SDK presents its own UI, and the bridge queue keeps the calls in order (login before update and logout, a
+    // display before the hide that follows it). Async methods would not keep that order.
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "loadWithKeys", returnType: .promise),
-        CAPPluginMethod(name: "registerIdentifiedUser", returnType: .promise),
-        CAPPluginMethod(name: "registerUnidentifiedUser", returnType: .promise),
-        CAPPluginMethod(name: "updateUser", returnType: .promise),
-        CAPPluginMethod(name: "logout", returnType: .promise),
-        CAPPluginMethod(name: "logEvent", returnType: .promise),
-        CAPPluginMethod(name: "displayMessenger", returnType: .promise),
-        CAPPluginMethod(name: "displayMessageComposer", returnType: .promise),
-        CAPPluginMethod(name: "displayHelpCenter", returnType: .promise),
-        CAPPluginMethod(name: "hideMessenger", returnType: .promise),
-        CAPPluginMethod(name: "displayLauncher", returnType: .promise),
-        CAPPluginMethod(name: "hideLauncher", returnType: .promise),
-        CAPPluginMethod(name: "displayInAppMessages", returnType: .promise),
-        CAPPluginMethod(name: "hideInAppMessages", returnType: .promise),
-        CAPPluginMethod(name: "displayCarousel", returnType: .promise),
-        CAPPluginMethod(name: "setUserHash", returnType: .promise),
-        CAPPluginMethod(name: "setUserJwt", returnType: .promise),
-        CAPPluginMethod(name: "setBottomPadding", returnType: .promise),
-        CAPPluginMethod(name: "displayArticle", returnType: .promise),
-    ] 
+        .promise("loadWithKeys", IntercomPlugin.loadWithKeys),
+        .promise("registerIdentifiedUser", IntercomPlugin.registerIdentifiedUser),
+        .promise("registerUnidentifiedUser", IntercomPlugin.registerUnidentifiedUser),
+        .promise("updateUser", IntercomPlugin.updateUser),
+        .promise("logout", IntercomPlugin.logout),
+        .promise("logEvent", IntercomPlugin.logEvent),
+        .promise("displayMessenger", IntercomPlugin.displayMessenger),
+        .promise("displayMessageComposer", IntercomPlugin.displayMessageComposer),
+        .promise("displayHelpCenter", IntercomPlugin.displayHelpCenter),
+        .promise("hideMessenger", IntercomPlugin.hideMessenger),
+        .promise("displayLauncher", IntercomPlugin.displayLauncher),
+        .promise("hideLauncher", IntercomPlugin.hideLauncher),
+        .promise("displayInAppMessages", IntercomPlugin.displayInAppMessages),
+        .promise("hideInAppMessages", IntercomPlugin.hideInAppMessages),
+        .promise("displayCarousel", IntercomPlugin.displayCarousel),
+        .promise("setUserHash", IntercomPlugin.setUserHash),
+        .promise("setUserJwt", IntercomPlugin.setUserJwt),
+        .promise("setBottomPadding", IntercomPlugin.setBottomPadding),
+        .promise("displayArticle", IntercomPlugin.displayArticle)
+    ]
     private var observers: [NSObjectProtocol] = []
 
     override public func load() {
@@ -69,47 +72,43 @@ public class IntercomPlugin: CAPPlugin, CAPBridgedPlugin {
         Intercom.setDeviceToken(deviceToken)
     }
 
-    @objc func loadWithKeys(_ call: CAPPluginCall) {
+    func loadWithKeys(_ call: CAPPluginCall) {
         let appId = call.getString("appId") ?? "NO_APP_ID_PASSED"
         let apiKey = call.getString("apiKeyIOS") ?? "NO_API_KEY_PASSED"
 
         Intercom.setApiKey(apiKey, forAppId: appId)
 
         NotificationCenter.default.addObserver(self, selector: #selector(self.didRegisterWithToken(notification:)), name: Notification.Name.capacitorDidRegisterForRemoteNotifications, object: nil)
+        call.resolve()
     }
 
-    @objc func registerIdentifiedUser(_ call: CAPPluginCall) {
+    func registerIdentifiedUser(_ call: CAPPluginCall) {
         let userId = call.getString("userId")
         let email = call.getString("email")
         let attributes = ICMUserAttributes()
-
-        if (email) != nil {
+        if email != nil {
             attributes.email = email
-            Intercom.loginUser(with: attributes) { result in
-                switch result {
-                case .success: call.resolve()
-                case .failure(let error): call.reject("Error logging in: \(error.localizedDescription)")
-                }
-            }
+        }
+        if userId != nil {
+            attributes.userId = userId
         }
 
-        if (userId) != nil {
-            attributes.userId = userId
-            Intercom.loginUser(with: attributes) { result in
-                switch result {
-                case .success: call.resolve()
-                case .failure(let error): call.reject("Error logging in: \(error.localizedDescription)")
-                }
+        // One login with every identifier given; the SDK needs email, userId or both, and reports a login it refuses
+        // through the completion.
+        Intercom.loginUser(with: attributes) { result in
+            switch result {
+            case .success: call.resolve()
+            case .failure(let error): call.reject("Error logging in: \(error.localizedDescription)")
             }
         }
     }
 
-    @objc func registerUnidentifiedUser(_ call: CAPPluginCall) {
+    func registerUnidentifiedUser(_ call: CAPPluginCall) {
         Intercom.loginUnidentifiedUser()
         call.resolve()
     }
 
-    @objc func updateUser(_ call: CAPPluginCall) {
+    func updateUser(_ call: CAPPluginCall) {
         let userAttributes = ICMUserAttributes()
         let userId = call.getString("userId")
         if userId != nil {
@@ -137,123 +136,110 @@ public class IntercomPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
-    @objc func logout(_ call: CAPPluginCall) {
+    func logout(_ call: CAPPluginCall) {
         Intercom.logout()
         call.resolve()
     }
 
-    @objc func logEvent(_ call: CAPPluginCall) {
+    func logEvent(_ call: CAPPluginCall) {
         let eventName = call.getString("name")
         let metaData = call.getObject("data")
 
-        if eventName != nil && metaData != nil {
-            Intercom.logEvent(withName: eventName!, metaData: metaData!)
-
-        } else if eventName != nil {
-            Intercom.logEvent(withName: eventName!)
+        if let eventName, let metaData {
+            Intercom.logEvent(withName: eventName, metaData: metaData)
+        } else if let eventName {
+            Intercom.logEvent(withName: eventName)
         }
 
         call.resolve()
     }
 
-    @objc func displayMessenger(_ call: CAPPluginCall) {
+    func displayMessenger(_ call: CAPPluginCall) {
         Intercom.present()
         call.resolve()
     }
 
-    @objc func displayMessageComposer(_ call: CAPPluginCall) {
+    func displayMessageComposer(_ call: CAPPluginCall) throws {
         guard let initialMessage = call.getString("message") else {
-            call.reject("Enter an initial message")
-            return
+            throw CAPPluginError("Enter an initial message")
         }
         Intercom.presentMessageComposer(initialMessage)
         call.resolve()
     }
 
-    @objc func displayHelpCenter(_ call: CAPPluginCall) {
+    func displayHelpCenter(_ call: CAPPluginCall) {
         Intercom.present(.helpCenter)
         call.resolve()
     }
 
-    @objc func hideMessenger(_ call: CAPPluginCall) {
+    func hideMessenger(_ call: CAPPluginCall) {
         Intercom.hide()
         call.resolve()
     }
 
-    @objc func displayLauncher(_ call: CAPPluginCall) {
+    func displayLauncher(_ call: CAPPluginCall) {
         Intercom.setLauncherVisible(true)
         call.resolve()
     }
 
-    @objc func hideLauncher(_ call: CAPPluginCall) {
+    func hideLauncher(_ call: CAPPluginCall) {
         Intercom.setLauncherVisible(false)
         call.resolve()
     }
 
-    @objc func displayInAppMessages(_ call: CAPPluginCall) {
+    func displayInAppMessages(_ call: CAPPluginCall) {
         Intercom.setInAppMessagesVisible(true)
         call.resolve()
     }
 
-    @objc func hideInAppMessages(_ call: CAPPluginCall) {
+    func hideInAppMessages(_ call: CAPPluginCall) {
         Intercom.setInAppMessagesVisible(false)
         call.resolve()
     }
 
-    @objc func displayCarousel(_ call: CAPPluginCall) {
-        if let carouselId = call.getString("carouselId") {
-            let carouselToPresent = Intercom.Content.carousel(id: carouselId)
-            Intercom.presentContent(carouselToPresent)
-            call.resolve()
-        } else {
-            call.reject("carouselId not provided to displayCarousel.")
+    func displayCarousel(_ call: CAPPluginCall) throws {
+        guard let carouselId = call.getString("carouselId") else {
+            throw CAPPluginError("carouselId not provided to displayCarousel.")
         }
+        let carouselToPresent = Intercom.Content.carousel(id: carouselId)
+        Intercom.presentContent(carouselToPresent)
+        call.resolve()
     }
 
-    @objc func setUserHash(_ call: CAPPluginCall) {
-        let hmac = call.getString("hmac")
-
-        if hmac != nil {
-            Intercom.setUserHash(hmac!)
-            call.resolve()
-            print("hmac sent to intercom")
-        } else {
-            call.reject("No hmac found. Read intercom docs and generate it.")
+    func setUserHash(_ call: CAPPluginCall) throws {
+        guard let hmac = call.getString("hmac") else {
+            throw CAPPluginError("No hmac found. Read intercom docs and generate it.")
         }
+        Intercom.setUserHash(hmac)
+        call.resolve()
+        print("hmac sent to intercom")
     }
 
-    @objc func setUserJwt(_ call: CAPPluginCall) {
-        let jwt = call.getString("jwt")
-
-        if jwt != nil {
-            Intercom.setUserJwt(jwt!)
-            call.resolve()
-            print("jwt sent to intercom")
-        } else {
-            call.reject("No jwt found. Read intercom docs and generate it.")
+    func setUserJwt(_ call: CAPPluginCall) throws {
+        guard let jwt = call.getString("jwt") else {
+            throw CAPPluginError("No jwt found. Read intercom docs and generate it.")
         }
+        Intercom.setUserJwt(jwt)
+        call.resolve()
+        print("jwt sent to intercom")
     }
 
-    @objc func setBottomPadding(_ call: CAPPluginCall) {
-
-        if let value = call.getString("value"),
-           let number = NumberFormatter().number(from: value) {
-
-            Intercom.setBottomPadding(CGFloat(truncating: number))
-            call.resolve()
-            print("set bottom padding")
-        } else {
-            call.reject("Enter a value for padding bottom")
+    func setBottomPadding(_ call: CAPPluginCall) throws {
+        guard let value = call.getString("value"),
+              let number = NumberFormatter().number(from: value) else {
+            throw CAPPluginError("Enter a value for padding bottom")
         }
+        Intercom.setBottomPadding(CGFloat(truncating: number))
+        call.resolve()
+        print("set bottom padding")
     }
 
-    @objc func displayArticle(_ call: CAPPluginCall) {
-        if let articleId = call.getString("articleId") {
-            let articleToPresent = Intercom.Content.article(id: articleId)
-            Intercom.presentContent(articleToPresent)
-            call.resolve()
-        } else {
-            call.reject("articleId not provided to presentArticle.")
+    func displayArticle(_ call: CAPPluginCall) throws {
+        guard let articleId = call.getString("articleId") else {
+            throw CAPPluginError("articleId not provided to presentArticle.")
         }
+        let articleToPresent = Intercom.Content.article(id: articleId)
+        Intercom.presentContent(articleToPresent)
+        call.resolve()
     }
 }
