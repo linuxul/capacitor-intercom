@@ -34,6 +34,7 @@ public class IntercomPlugin : Plugin() {
 
         // load parent
         super.load()
+        call.resolve()
     }
 
     override fun handleOnStart() {
